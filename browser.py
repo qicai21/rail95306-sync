@@ -1,8 +1,6 @@
 import requests
 import json
 import base64
-from PIL import Image
-from io import StringIO, BytesIO
 import pandas as pd
 import numpy as np
 import cv2
@@ -31,11 +29,30 @@ URLS = {
 
 
 def readb64(base64_string):
-    buff = BytesIO()
-    buff.write(base64.b64decode(base64_string))
-    pimg = Image.open(buff)
-    cvimg = cv2.cvtColor(np.array(pimg), cv2.COLOR_RGB2BGR)
-    return cvimg
+    image_data = base64.b64decode(base64_string)
+    nparr = np.frombuffer(image_data, np.uint8)
+    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    return image
+
+def find_white_block_x(base64_string):
+    image = readb64(base64_string)
+    # 转换为灰度图像
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # 二值化处理
+    _, binary = cv2.threshold(gray, 253, 255, cv2.THRESH_BINARY)  # 阈值200可根据实际情况调整
+    h, w = binary.shape
+
+    # 遍历图像，寻找5x5的白色方块
+    for y in range(0, h - 40):
+        for x in range(0, w - 40):
+            # 提取40x8的区域
+            block = binary[y:y + 5, x:x + 44]
+            # 检查是否为全白色
+            if cv2.countNonZero(block) == 220:  # 5x5全白色像素点数为25
+                return x
+
+    print("未找到符合条件的白色方块")
+    return None
 
 class Browser():
     def __init__(self, user=None):
@@ -230,26 +247,11 @@ class Browser():
         resp = requests.post(token_url, '{}', headers=login_headers)
         data = json.loads(resp.content.decode())['data']
         token = data['token']
-        cvimg = readb64(data['oriCopyImage'])
-        print(type(cvimg))
-        h, w, ch = cvimg.shape
-        for i in range(10, w, 10):
-            size = 1
-            pos = (i, 50)
-            thick = 2
-            c = (0, 0, 255)
-            if i % 30 == 0:
-                size = 2
-                c = (0, 255, 0)
-            cv2.circle(cvimg, pos, size, c, thick)
 
-        cv2.imshow('test', cvimg)
-        # im = Image.open(BytesIO(image))
-        # im.show()
-        cv2.waitKey(0)
-        pos = input('输入位置')
-        pos = int(pos)
-        return [token, pos]
+        pos_x = find_white_block_x(data['oriCopyImage'])
+        if pos_x is None:
+            raise ValueError('未找到白色方块')
+        return [token, pos_x]
 
     def get_white_list_for_update_access_session(self):
         url = 'https://ec.95306.cn/api/yhzx/user/queryWhiteListStatus'
