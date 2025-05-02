@@ -5,6 +5,8 @@ import pandas as pd
 import numpy as np
 import cv2
 from datetime import datetime
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_v1_5 as PKCS1
 from pymongo import MongoClient
 from header_configs import USERS, get_cookie, make_query_data, \
     get_headers, login_headers, get_login_cookie
@@ -27,6 +29,8 @@ URLS = {
         'referer': 'https://ec.95306.cn/ydTrickDu?prams='},
 }
 
+# 公钥字符串（在 “ec.95306.cn/js/app.0ab11d6af2095d6af1e2.js” 文件中找到的公钥，不知道会不会变）
+PUBLIC_KEY_STR = "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC7qZO6JLBLPjGFvqhmJLklv/+NGZ7BKdtYB6LPkYkHK4bqCgi1B6OEnkz2bZtwrFblJlDjJxFVVLYMUUyEAzx3QlCmGbI1BdpPizxwyDj2RbFrXwmHaimQavF+Yv0xST2xenxPzP9yUggYomRogMQKbxMGLfP7jvWCy3MtDoGhqQIDAQAB"
 
 def readb64(base64_string):
     image_data = base64.b64decode(base64_string)
@@ -53,6 +57,17 @@ def find_white_block_x(base64_string):
 
     print("未找到符合条件的白色方块")
     return None
+
+def get_encrypt_rsa(password):
+    # 将公钥字符串加载为 RSA 公钥对象
+    public_key = RSA.import_key(f"-----BEGIN PUBLIC KEY-----\n{PUBLIC_KEY_STR}\n-----END PUBLIC KEY-----")
+    # print(public_key.export_key().decode())
+    # 使用 PKCS1_v1_5 加密
+    cipher = PKCS1.new(public_key)
+    encrypted_data = cipher.encrypt(password.encode('utf-8'))
+    # 返回 Base64 编码的加密结果
+    return base64.b64encode(encrypted_data).decode('utf-8')
+
 
 class Browser():
     def __init__(self, user=None):
@@ -83,14 +98,13 @@ class Browser():
         last_refresh = datetime.strptime(user_data['refresh_time'], PATTN)
         t_ = datetime.now() - last_refresh
         if t_.total_seconds() / 60 / 60 > 24:
-            self.ask_for_new_session()
+            self.get_white_list_for_update_access_session()
 
         cookie = get_cookie(self.user, self.session, self.token)
         self.headers.update({
             'access_token': self.token,
             'Cookie': cookie,
         })
-
 
     def ask_for_input_token(self):
         self.token = input('请输入token:')
@@ -212,7 +226,7 @@ class Browser():
         except Exception as ex:
             raise ex
             
-    def login(self, rsa_pwd):
+    def login(self):
         token, pos = self.get_login_token()
         self.get_white_list_for_update_access_session()
         url = 'https://ec.95306.cn/api/zuul/login'
@@ -224,7 +238,14 @@ class Browser():
             "secType":"RSA",
             "extData":{"grant_type":"password"}
             }
-        data['password'] = rsa_pwd
+        user_pwd = self.user['user_pwd']
+        # print(f'login user: {self.user["user_id"]}')
+        # print(f'login password: {user_pwd}')
+        # 先加密密码
+        rsa_code = get_encrypt_rsa(user_pwd)
+        # print(f'login password encrypted: {rsa_code}')
+        data['password'] = rsa_code
+        # 这里的密码是加密后的密码,不是明文密码
         post_data = json.dumps(data)
 
         content_length = len(post_data)
