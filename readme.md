@@ -1,161 +1,171 @@
 # rail95306-sync
 
-## 一、 数据字典
+95306 认证抓取、验证、刷新追踪与心跳保活实验仓库。
 
-'uuid'
-'ydid'
-'xqslh'
-'ysfs'
-'ifdzlh'
-'ifdzyd'
-'zcrq'
-'fzhzzm' # 发站名称
-'dzhzzm' # 到站名称
-'dztmism'
-'fjm'
-'djm'
-'hzpm' # 货种品名
-'fhdwmc'
-'fhdwdm'
-'shdwmc'
-'zcddsj' # 装车抵达时间
-'zckssj' # 装车开始时间
-'zcwbsj' # 装车完毕时间
-'zcdcsj' # 装车带出时间
-'hph'  # 运单号（货票号）
-'yf'
-'zyf'
-'ifbg'
-'ch'  # 车号
-'fccc' # 发车车次
-'fcsj' # 发车时间
-'dzcc' # 到站车次
-'dzsj' # 到站时间
-'xcddsj' # 卸车到达时间（入线）
-'xckssj' # 卸车开始时间
-'xcwbsj' # 卸车完毕时间
-'xcdcsj' # 卸车带出时间
-'dzjfrq' # 到站缴费日期
-'fz'
-'dzyxhz'
-'fzyxhz'
-'fzyx'
-'ztgjjcend'
-'ztgjend'
-'czydid'
-'clczbz'
-'hwjs'
-'dzsfh'
-'sfpbh'
-'czcx' # 车型号
-'ifsetmm'
-'ifsqdzbg'
-'zffs'
-'zfzt'
-'zfsj'
-'zfsjForExcel'
-'zfje'
-'tyrqzzt'
-'tyrqzsj'
-'cyrqzzt'
-'cyrqzsj'
-'ifydzf'
-'bswjid'
-'dzbgBswjid'
-'ydqzzt'
-'pm'
-'dzyx'
-'shdwdm'
-'bgxshrdm'
-'bgxshrmc'
-'bgztgj'
-'iftcbg'
-'dzqmjg'
-'wxpbz'
-'wxpdm'
-'wxppmhz'
-'ditieguogui'
-'crcbs'
-'bszlhmmbs'
-'sfszlhmm'
-'hzbgbs'
-'ch1'
-'ch2'
-'ch3'
-'hqjc'
-'hwmc'
-'cyrqdzl'
-'cyrqdjs'
-'lhmm'
-'zpsj'
-'xh' # 箱号
-'tyrjzsx'
-'spfmc'
-'nsrdz'
-'nsrdh'
-'nsrkhh'
-'nsrzh'
-'nsrsbh'
-'tbfs'
-'yjlc'
-'yjxfh'
-'pmms'
-'fffs'
-'jhtzzt'
-'zthzzt'
-'cs'
-'xs'
-'zzl'
-'csxs'
-'dzbgZtjgjc'
-'slrq'
-'slrxm'
-'wslyyhz'
+当前仓库重点不在完整业务查询，而在把 95306 的登录态从“手工登录一次”收敛成“可保存、可验证、可刷新、可多账户复用”的认证链路。
 
-## 二、 轨迹数据字典
+## 当前状态
 
-[{'uuid': None,
-  'id': None,
-  'aid': None,
-  'operator': '新台子',
-  'loadBurTime': None,
-  'loadMorTime': None,
-  'dataNum': 0,
-  'message': '货物已卸车完毕。',
-  'detail': '2022-12-05 00:55:14',
-  'busiType': None,
-  'sourceList': None,
-  'czdz': '辽宁省 铁岭市 铁岭县',
-  'tmism': '53918',
-  'rptid': None},
- {'uuid': None,
-  'id': None,
-  'aid': None,
-  'operator': '新台子',
-  'loadBurTime': None,
-  'loadMorTime': None,
-  'dataNum': 0,
-  'message': '货物已开始卸车。',
-  'detail': '2022-12-05 00:05:56',
-  'busiType': None,
-  'sourceList': None,
-...
-  'busiType': None,
-  'sourceList': None,
-  'czdz': '辽宁省 葫芦岛市 连山区',
-  'tmism': '51632',
-  'rptid': None}]
+已经实现的能力：
 
+- 首次登录门票抓取
+  - 使用 Playwright headed 模式打开 `https://ec.95306.cn/login`
+  - 可按账户自动填写用户名和密码
+  - 由人工完成滑块和短信验证
+  - 登录后采集 `cookies`、`localStorage`、`sessionStorage`、关键请求/响应摘要
 
-## 用户登录 95306 的模拟流程
+- 门票有效性验证
+  - 使用已保存门票重新打开 `https://ec.95306.cn/platformIndex`
+  - 可验证门票是否还能维持登录
 
-1. 用户打开 95306 首页，服务器会加载一项<"https://ec.95306.cn/js/app.0ab11d6af2095d6af1e2.js">，里边有一个生成 password 的 rsa 加密code的方法，通过检索“setPublicKey”可以找到这个方法，里边存着公钥。
-2. 用户清空浏览器 cookie 后，在 95306 登录页面输入用户名和密码，进入图片验证环节。浏览器自动向 “https://ec.95306.cn/api/yhzx/slug/getSliderImg” 发送 POST 请求。该请求返回拼图的 base64 数据（可通过 cv2 渲染）、token等重要数据。
-3. 浏览器自动发出checkUserLoginState请求。正常情况下，返回{msg: "OK", returnCode: "00200", data: true} 。若在开发设计过程中或错误使用登录功能过于频繁，账号封停 1 - 2 小时，该检验会返回账户封停状态。
+- 登录态刷新追踪
+  - 观察页面运行期间 `SESSION`、`accessToken`、`refreshToken`、`resetTime` 的变化
+  - 对比页面操作前后的认证状态差异
 
-## 程序处理步骤
+- 纯接口心跳保活原型
+  - 调用 `queryWhiteListStatus` 刷新 `SESSION`
+  - 调用 `refreshToken` 刷新 `accessToken + refreshToken`
+  - 成功时回写本地门票，失败时生成诊断报告
 
-1. 程序的`browser.py`中设置了`get_encrypt_rsa`方法。
-2. 程序调用`login`方法，方法内部先调用`get_login_token`方法，获取 token 和拼图横坐标数据 X（通过`browse.find_white_block_x`方法处理拼图得到）。
-3. 程序调用get_white_list_for_update_access_session方法，模拟浏览器的checkUserLoginState请求,验证用户登陆状态并更新`SESSION`信息，来源于返回响应的header。
-   
+## 目录
+
+- [auth](/D:/projects/rail95306-sync/auth)
+  - 账户配置、门票存储、心跳保活逻辑
+
+- [tools](/D:/projects/rail95306-sync/tools)
+  - 首次抓取、门票验证、差异分析、刷新追踪、纯接口刷新脚本
+
+- [runtime](/D:/projects/rail95306-sync/runtime)
+  - 本地运行产物
+  - 账户配置、门票文件、验证报告、刷新追踪报告都在这里
+  - 该目录已加入 `.gitignore`
+
+- [browser.py](/D:/projects/rail95306-sync/browser.py)
+  - 旧版接口调用实现
+  - 目前主要作为历史逻辑参考
+
+## 核心脚本
+
+- [tools/bootstrap_95306_ticket.py](/D:/projects/rail95306-sync/tools/bootstrap_95306_ticket.py)
+  - 首次登录门票抓取器
+
+- [tools/validate_95306_ticket.py](/D:/projects/rail95306-sync/tools/validate_95306_ticket.py)
+  - 已保存门票的有效性验证器
+
+- [tools/diff_95306_ticket.py](/D:/projects/rail95306-sync/tools/diff_95306_ticket.py)
+  - 两份门票差异分析
+
+- [tools/trace_95306_refresh.py](/D:/projects/rail95306-sync/tools/trace_95306_refresh.py)
+  - 页面运行期间的刷新来源追踪
+
+- [tools/refresh_95306_ticket.py](/D:/projects/rail95306-sync/tools/refresh_95306_ticket.py)
+  - 纯接口心跳保活入口
+
+## 快速开始
+
+### 1. 安装依赖
+
+目前浏览器抓取和验证依赖 Playwright：
+
+```powershell
+cd D:\projects\rail95306-sync
+python -m pip install playwright
+python -m playwright install chromium
+```
+
+纯接口心跳脚本使用 Python 标准库，不额外依赖 `requests`。
+
+### 2. 查看账户
+
+```powershell
+python .\tools\bootstrap_95306_ticket.py --list-accounts
+```
+
+账户文件位置：
+
+- [runtime/95306_accounts.json](/D:/projects/rail95306-sync/runtime/95306_accounts.json)
+
+### 3. 首次登录抓票
+
+例如抓取 `newts`：
+
+```powershell
+python .\tools\bootstrap_95306_ticket.py --account newts --version run1
+```
+
+流程：
+
+- 脚本打开 95306 登录页
+- 自动填写账号密码
+- 人工完成滑块和短信验证
+- 登录成功后确认保存当前门票
+
+输出：
+
+- `runtime/95306_ticket_<account>_<version>.json`
+- `runtime/95306_storage_state_<account>_<version>.json`
+
+### 4. 验证门票是否可复用
+
+```powershell
+python .\tools\validate_95306_ticket.py --account newts --version run1 --headed
+```
+
+### 5. 追踪页面操作时的刷新行为
+
+```powershell
+python .\tools\trace_95306_refresh.py --account newts --version run1 --headed --duration-seconds 300
+```
+
+### 6. 纯接口刷新门票
+
+```powershell
+python .\tools\refresh_95306_ticket.py --account newts --version run1
+```
+
+如果刷新成功，会回写：
+
+- 对应的 `ticket` 文件
+- 对应的 `storage_state` 文件
+
+并生成报告：
+
+- `runtime/95306_ticket_heartbeat_<account>_<version>.json`
+
+## 当前已知结论
+
+基于当前实验，95306 登录态里最值得关注的字段是：
+
+- `SESSION`
+- `95306-1.6.10-accessToken`
+- `95306-outer-refreshToken`
+- `95306-outer-resetTime`
+
+目前已验证：
+
+- `queryWhiteListStatus` 仍然可以返回新的 `SESSION`
+- `refreshToken` 接口仍然可以刷新 `accessToken + refreshToken`
+- `refreshToken` 是轮换型的一次性票据，旧值不能重复使用
+- 页面业务操作会频繁刷新 `SESSION`
+- `resetTime` 会持续递减，表现为前端倒计时/心跳信号
+
+## 当前边界
+
+本仓库当前还没有完成这些内容：
+
+- 最终版多账户心跳调度器
+- 完整业务查询模块重构
+- openclaw / agent skill 封装
+- 全量字段字典整理
+
+## 同步
+
+GitHub 仓库：
+
+- [qicai21/rail95306-sync](https://github.com/qicai21/rail95306-sync)
+
+Mac Studio 同步：
+
+```bash
+git clone https://github.com/qicai21/rail95306-sync.git
+```
