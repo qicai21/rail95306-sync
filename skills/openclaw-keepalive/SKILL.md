@@ -21,6 +21,8 @@ Run all commands from:
 
 `D:\projects\rail95306-sync`
 
+On macOS, use the cloned repository path instead of the Windows path. The workflow is the same.
+
 ## Single Entry Point
 
 Always prefer this manager script instead of rebuilding commands manually:
@@ -33,6 +35,11 @@ Supported actions:
 - `status`
 - `stop`
 - `update-restart`
+
+The manager script is cross-platform:
+
+- Windows: uses `tasklist` / `taskkill`
+- macOS and Linux: uses PID checks plus `kill`
 
 ## Commands
 
@@ -85,6 +92,39 @@ Manager stdout/stderr log:
 Failure screenshots:
 
 - [runtime/screenshots](/D:/projects/rail95306-sync/runtime/screenshots)
+
+## Account Config
+
+The worker expects:
+
+- `runtime/95306_accounts.json`
+
+The file format is:
+
+```json
+{
+  "accounts": [
+    {
+      "key": "newts",
+      "name": "新铁晟",
+      "id": "5035440021",
+      "pwd": "your-password"
+    }
+  ]
+}
+```
+
+Do not invent a different mapping format.
+
+If the file is missing on another machine, copy the structure from:
+
+- [config_examples/95306_accounts.example.json](/D:/projects/rail95306-sync/config_examples/95306_accounts.example.json)
+
+Important:
+
+- `runtime/` is ignored by Git
+- cloned machines will not automatically have live account secrets or live ticket files
+- if `runtime/95306_accounts.json` or ticket files are missing, report that clearly instead of pretending the worker can start
 
 When asked whether it is still online, report:
 

@@ -43,14 +43,20 @@ def remove_pid_record() -> None:
 
 
 def process_exists(pid: int) -> bool:
-    result = subprocess.run(
-        ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    output = result.stdout.strip()
-    return bool(output and "No tasks are running" not in output and str(pid) in output)
+    if os.name == "nt":
+        result = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        output = result.stdout.strip()
+        return bool(output and "No tasks are running" not in output and str(pid) in output)
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
 
 
 def last_heartbeat_event() -> dict[str, Any] | None:
@@ -107,12 +113,22 @@ def stop_process() -> bool:
     if not process_exists(pid):
         remove_pid_record()
         return False
-    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], check=False, capture_output=True, text=True)
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], check=False, capture_output=True, text=True)
+    else:
+        subprocess.run(["kill", "-TERM", str(pid)], check=False, capture_output=True, text=True)
     for _ in range(10):
         if not process_exists(pid):
             remove_pid_record()
             return True
         time.sleep(0.5)
+    if os.name != "nt":
+        subprocess.run(["kill", "-KILL", str(pid)], check=False, capture_output=True, text=True)
+        for _ in range(10):
+            if not process_exists(pid):
+                remove_pid_record()
+                return True
+            time.sleep(0.5)
     return False
 
 

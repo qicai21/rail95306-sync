@@ -1,0 +1,16 @@
+{
+  "accounts": [
+    {
+      "key": "newts",
+      "name": "新铁晟",
+      "id": "5035440021",
+      "pwd": "your-password"
+    },
+    {
+      "key": "cy-steel",
+      "name": "朝阳钢铁",
+      "id": "3018775055",
+      "pwd": "your-password"
+    }
+  ]
+}
