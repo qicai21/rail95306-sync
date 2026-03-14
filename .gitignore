@@ -3,6 +3,9 @@ __pycache__
 .pytest_cache
 *.json
 *.md
+!readme.md
 *.drawio
 *.xlsx
 *.png
+runtime/
+playwright/.auth/
