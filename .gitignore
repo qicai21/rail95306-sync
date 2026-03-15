@@ -13,5 +13,12 @@ runtime/95306_keepalive.log
 runtime/95306_keepalive.pid
 runtime/95306_keepalive_runner.log
 runtime/screenshots/
+runtime/*cookie*.json
+runtime/*cookies*.json
+runtime/*session*.json
+runtime/*storage*.json
+runtime/*local*.json
+runtime/*.log
+runtime/*.pid
 
 playwright/.auth/
