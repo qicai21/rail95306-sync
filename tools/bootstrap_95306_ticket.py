@@ -59,12 +59,12 @@ class ObservationState:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Capture 95306 initial login ticket with a headed Playwright browser.")
+    parser = argparse.ArgumentParser(description="Initialize a local 95306 ticket by opening a headed Playwright browser for manual login.")
     parser.add_argument("--timeout-minutes", type=int, default=15, help="Maximum time to wait for manual login.")
     parser.add_argument("--poll-seconds", type=float, default=2.0, help="Polling interval while waiting for login.")
     parser.add_argument("--browser", choices=["chromium", "firefox", "webkit"], default="chromium")
     parser.add_argument("--account", help="Account key, name, or id from runtime/95306_accounts.json.")
-    parser.add_argument("--version", help="Optional capture label, for example run1 or 20260314a.")
+    parser.add_argument("--version", help="Optional legacy capture label. The worker only uses the standard account-scoped ticket files.")
     parser.add_argument("--no-autofill", action="store_true", help="Do not auto-fill username and password.")
     parser.add_argument("--yes", action="store_true", help="Auto-confirm capture once login success is detected.")
     parser.add_argument("--list-accounts", action="store_true", help="List configured accounts and exit.")
@@ -440,6 +440,8 @@ def main() -> int:
         return 0
 
     account = find_account(args.account)
+    if args.version:
+        print("warning: --version is a legacy debug path. The worker and preflight only use the standard account-scoped ticket files.")
     try:
         ticket_path, storage_path = bootstrap_ticket(
             account=account,

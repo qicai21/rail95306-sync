@@ -2,13 +2,13 @@
   "accounts": [
     {
       "key": "newts",
-      "name": "新铁晟",
+      "name": "Example Account A",
       "id": "5035440021",
       "pwd": "your-password"
     },
     {
       "key": "cy-steel",
-      "name": "朝阳钢铁",
+      "name": "Example Account B",
       "id": "3018775055",
       "pwd": "your-password"
     }

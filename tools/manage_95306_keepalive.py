@@ -8,6 +8,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+if str(Path(__file__).resolve().parent.parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from auth.preflight_95306 import build_preflight_report, write_preflight_report
+
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
 RUNTIME_DIR = ROOT_DIR / "runtime"
@@ -68,7 +73,17 @@ def last_heartbeat_event() -> dict[str, Any] | None:
     return json.loads(lines[-1])
 
 
-def start_process(headed: bool = False) -> int:
+def run_preflight(strict: bool = False) -> dict[str, Any]:
+    report = build_preflight_report(strict=strict)
+    report_path = write_preflight_report(report)
+    return {
+        "ok": report["status"] == "ok",
+        "report": report,
+        "report_path": str(report_path.resolve()),
+    }
+
+
+def start_process(headed: bool = False, strict: bool = False) -> int:
     ensure_runtime_dir()
     existing = read_pid_record()
     if existing and process_exists(int(existing["pid"])):
@@ -82,6 +97,8 @@ def start_process(headed: bool = False) -> int:
     command = [sys.executable, str(RUNNER)]
     if headed:
         command.append("--headed")
+    if strict:
+        command.append("--strict")
 
     proc = subprocess.Popen(
         command,
@@ -99,6 +116,7 @@ def start_process(headed: bool = False) -> int:
             "command": command,
             "cwd": str(ROOT_DIR),
             "headed": headed,
+            "strict": strict,
         }
     )
     stdout_handle.close()
@@ -157,7 +175,7 @@ def git_pull() -> subprocess.CompletedProcess[str]:
     )
 
 
-def update_restart(headed: bool = False) -> dict[str, Any]:
+def update_restart(headed: bool = False, strict: bool = False) -> dict[str, Any]:
     stopped = stop_process()
     pulled = git_pull()
     if pulled.returncode != 0:
@@ -169,7 +187,20 @@ def update_restart(headed: bool = False) -> dict[str, Any]:
             "started": False,
             "pid": None,
         }
-    pid = start_process(headed=headed)
+    preflight = run_preflight(strict=strict)
+    if not preflight["ok"]:
+        return {
+            "stopped": stopped,
+            "pull_ok": True,
+            "pull_stdout": pulled.stdout,
+            "pull_stderr": pulled.stderr,
+            "started": False,
+            "pid": None,
+            "preflight_ok": False,
+            "preflight_report_path": preflight["report_path"],
+            "preflight_report": preflight["report"],
+        }
+    pid = start_process(headed=headed, strict=strict)
     return {
         "stopped": stopped,
         "pull_ok": True,
@@ -177,6 +208,8 @@ def update_restart(headed: bool = False) -> dict[str, Any]:
         "pull_stderr": pulled.stderr,
         "started": True,
         "pid": pid,
+        "preflight_ok": True,
+        "preflight_report_path": preflight["report_path"],
     }
 
 
@@ -184,14 +217,42 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Manage the 95306 keepalive worker.")
     parser.add_argument("action", choices=["start", "status", "stop", "update-restart"])
     parser.add_argument("--headed", action="store_true", help="Start the keepalive worker in headed mode.")
+    parser.add_argument("--strict", action="store_true", help="Block startup if any configured account is not fully initialized.")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     if args.action == "start":
-        pid = start_process(headed=args.headed)
-        print(json.dumps({"action": "start", "pid": pid}, ensure_ascii=False))
+        preflight = run_preflight(strict=args.strict)
+        if not preflight["ok"]:
+            print(
+                json.dumps(
+                    {
+                        "action": "start",
+                        "started": False,
+                        "preflight_ok": False,
+                        "preflight_report_path": preflight["report_path"],
+                        "preflight_report": preflight["report"],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 1
+        pid = start_process(headed=args.headed, strict=args.strict)
+        print(
+            json.dumps(
+                {
+                    "action": "start",
+                    "started": True,
+                    "pid": pid,
+                    "preflight_ok": True,
+                    "preflight_report_path": preflight["report_path"],
+                },
+                ensure_ascii=False,
+            )
+        )
         return 0
     if args.action == "status":
         print(json.dumps(status(), ensure_ascii=False, indent=2))
@@ -200,7 +261,7 @@ def main() -> int:
         print(json.dumps({"action": "stop", "stopped": stop_process()}, ensure_ascii=False))
         return 0
     if args.action == "update-restart":
-        result = update_restart(headed=args.headed)
+        result = update_restart(headed=args.headed, strict=args.strict)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0 if result["pull_ok"] and result["started"] else 1
     return 1

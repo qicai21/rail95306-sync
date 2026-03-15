@@ -193,6 +193,10 @@ def storage_state_path_for_account(account_key: str) -> Path:
     return RUNTIME_DIR / f"95306_storage_state_{slugify_account_key(account_key)}.json"
 
 
+def preflight_report_path() -> Path:
+    return RUNTIME_DIR / "95306_preflight_report.json"
+
+
 def validation_report_path_for_account(account_key: str) -> Path:
     return RUNTIME_DIR / f"95306_ticket_validation_{slugify_account_key(account_key)}.json"
 
