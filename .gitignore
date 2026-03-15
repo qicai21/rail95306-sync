@@ -20,5 +20,8 @@ runtime/*storage*.json
 runtime/*local*.json
 runtime/*.log
 runtime/*.pid
+runtime/95306_query_observation_*.json
+runtime/95306_query_observation_*.partial.json
+runtime/95306_refresh_trace_*.json
 
 playwright/.auth/

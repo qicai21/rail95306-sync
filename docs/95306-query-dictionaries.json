@@ -1,0 +1,125 @@
+{
+  "status_codes": {
+    "10": "待受理",
+    "12": "受理通过",
+    "30": "已装车",
+    "35": "已制单",
+    "40": "已发车",
+    "60": "已到达",
+    "70": "已卸车",
+    "80": "货物已交付"
+  },
+  "confirmed_stations": {
+    "高桥镇": {
+      "keyword": "gqz",
+      "tmism": "51632",
+      "dbm": "GZD",
+      "pym": "GQZ",
+      "ljdm": "T00",
+      "ljqc": "沈阳局",
+      "ljjc": "沈",
+      "cwd": "T0309",
+      "dzm": "02",
+      "hyzdmc": "大连物流中心",
+      "csbm": "2107",
+      "hzzm": "高桥镇"
+    },
+    "马林": {
+      "keyword": "ml",
+      "tmism": "52670",
+      "dbm": "MID",
+      "pym": "ML",
+      "ljdm": "T00",
+      "ljqc": "沈阳局",
+      "ljjc": "沈",
+      "cwd": "T0602",
+      "dzm": "02",
+      "hyzdmc": "通辽物流中心",
+      "csbm": "1504"
+    },
+    "新台子": {
+      "source": "legacy_reference",
+      "tmism": "53918"
+    },
+    "得胜台": {
+      "source": "legacy_reference",
+      "tmism": "53924"
+    },
+    "虎石台": {
+      "source": "legacy_reference",
+      "tmism": "53900"
+    }
+  },
+  "station_lookup_fields": {
+    "request": {
+      "q": "站名/拼音检索词",
+      "isNoHy": "是否排除货运站过滤",
+      "ljdm": "路局代码过滤",
+      "limit": "候选上限"
+    },
+    "response": {
+      "tmism": "站点TMIS编码",
+      "hzzm": "站名",
+      "pym": "拼音码",
+      "dbm": "电报码",
+      "ljdm": "路局代码",
+      "ljqc": "路局全称",
+      "ljjc": "路局简称",
+      "cwd": "车务段或归属编码",
+      "dzm": "地区/局代码",
+      "hyzdmc": "货运站点归属名称",
+      "csbm": "城市编码"
+    }
+  },
+  "shipment_fields": {
+    "ydid": "运单号",
+    "czydid": "运单号（冗余/同义字段）",
+    "fztmism": "发站TMIS编码",
+    "fzhzzm": "发站站名",
+    "dztmism": "到站TMIS编码",
+    "dzhzzm": "到站站名",
+    "fjm": "发局名称",
+    "djm": "到局名称",
+    "fzyxhz": "发站专用线名称",
+    "dzyxhz": "到站专用线名称",
+    "fhdwmc": "发货单位名称",
+    "shdwmc": "收货单位名称",
+    "hzpm": "货种品名",
+    "pm": "品名编码",
+    "zzl": "重量",
+    "yf": "运费",
+    "zfje": "支付金额",
+    "zcrq": "发运日期",
+    "fcsj": "发车时间",
+    "dzsj": "到达时间",
+    "dzjfrq": "交付时间",
+    "ztgjend": "状态码",
+    "ztgjjcend": "状态中文",
+    "ifdzyd": "是否电子运单",
+    "hph": "货票号",
+    "ch": "车号",
+    "xh": "箱号",
+    "yjxfh": "运价项目号",
+    "zffs": "支付方式",
+    "zfzt": "支付状态"
+  },
+  "last_update_time_priority": [
+    "dzjfrq",
+    "xcdcsj",
+    "xcwbsj",
+    "xckssj",
+    "xcddsj",
+    "dzsj",
+    "fcsj",
+    "zcdcsj",
+    "zcwbsj",
+    "zckssj",
+    "zcddsj",
+    "zpsj",
+    "slrq"
+  ],
+  "session_notes": {
+    "queryCargoSend_sets_session_cookie": true,
+    "note": "业务查询成功响应可能返回新的 SESSION Cookie，后续整合 keepalive 时应允许查询模块回写最新 SESSION。"
+  }
+}
