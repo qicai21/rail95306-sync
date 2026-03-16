@@ -1,13 +1,16 @@
 import base64
 import json
 import http.cookiejar
+import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from dataclasses import asdict, dataclass
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+from auth.session_state import SessionStateManager
 from auth.ticket_store import load_ticket_bundle, ticket_path_for_account
 
 
@@ -130,7 +133,9 @@ def _extract_user_context(ticket_data: dict[str, Any]) -> dict[str, Any]:
         "bureauDm": user_context.get("bureauDm", "02"),
         "bureauId": user_context.get("bureauId", "T00"),
         "unitId": user_context.get("unitId", ""),
+        "unitName": user_context.get("unitName", ""),
         "userId": user_context.get("userId", ""),
+        "userName": user_context.get("userName", ""),
         "userType": user_context.get("userType", "OUTUNIT"),
         "type": user_context.get("type", "outer"),
         "access_token": access_token,
@@ -149,9 +154,12 @@ def _build_headers(ticket_data: dict[str, Any], referer: str) -> dict[str, str]:
         "bureauDm": user_context["bureauDm"],
         "bureauId": user_context["bureauId"],
         "unitId": user_context["unitId"],
+        "unitName": urllib.parse.quote(user_context["unitName"]),
         "userId": user_context["userId"],
+        "userName": urllib.parse.quote(user_context["userName"]),
         "userType": user_context["userType"],
         "type": user_context["type"],
+        "rTrackId": uuid.uuid4().hex,
         "access_token": user_context["access_token"],
     }
 
@@ -169,6 +177,67 @@ def _latest_update_from_record(record: dict[str, Any]) -> str | None:
         if value:
             return str(value)
     return None
+
+
+def build_tracking_projection(shipment_id: str, tracking_response: dict[str, Any]) -> dict[str, Any]:
+    body = tracking_response.get("body", {})
+    data = body.get("data", {}) or {}
+    fs_main = data.get("fsMain", {}) or {}
+    events = data.get("gj", []) or []
+    route_nodes = data.get("jlzc", []) or []
+    latest_event = events[0] if events else {}
+
+    return {
+        "query_input": {
+            "shipment_id": shipment_id,
+            "encoded_tracking_id": _base64_encode_tracking_id(shipment_id),
+        },
+        "shipment": {
+            "shipment_id": fs_main.get("ydid") or shipment_id,
+            "car_no": fs_main.get("ch"),
+            "container_no": fs_main.get("hph"),
+            "cargo_name": fs_main.get("hzpm"),
+            "origin_name": fs_main.get("fzhzzm"),
+            "origin_tmis": fs_main.get("fztmism"),
+            "origin_site_name": fs_main.get("fzyxhz"),
+            "destination_name": fs_main.get("dzhzzm"),
+            "destination_tmis": fs_main.get("dztmism"),
+            "destination_site_name": fs_main.get("dzyxhz"),
+            "shipper_name": fs_main.get("fhdwmc"),
+            "consignee_name": fs_main.get("shdwmc"),
+        },
+        "latest_status": {
+            "status_code": fs_main.get("ztgj"),
+            "status_name": fs_main.get("ztgjjc"),
+            "latest_event_time": latest_event.get("detail"),
+            "latest_event_message": latest_event.get("message"),
+            "latest_event_station": latest_event.get("operator"),
+            "latest_event_station_tmis": latest_event.get("tmism"),
+            "latest_event_station_dbm": latest_event.get("czdbm"),
+            "latest_event_location": latest_event.get("czdz"),
+            "latest_event_report_id": latest_event.get("rptid"),
+        },
+        "tracking_flags": data.get("gjzt", {}) or {},
+        "timing": {
+            "estimated_arrival_time": data.get("yjddsj"),
+            "estimated_arrival_time_alt": data.get("yjddsj1"),
+            "distance_remaining_km": data.get("yjddlc"),
+            "use_hour": data.get("useHour"),
+            "departure_date": fs_main.get("zcrq"),
+            "departure_time": fs_main.get("fcsj"),
+            "arrival_time": fs_main.get("dzsj"),
+            "delivery_time": fs_main.get("dzjfrq"),
+        },
+        "events": events,
+        "route_nodes": route_nodes,
+        "raw_response": {
+            "http_status": tracking_response.get("status"),
+            "return_code": body.get("returnCode"),
+            "message": body.get("msg"),
+            "event_count": len(events),
+            "route_node_count": len(route_nodes),
+        },
+    }
 
 
 def _load_station_cache() -> dict[str, dict[str, Any]]:
@@ -208,8 +277,11 @@ class ShipmentQueryClient:
         self.account_key = account_key
         self.ticket_path = ticket_path_for_account(account_key)
         self.ticket_data = load_ticket_bundle(self.ticket_path)
+        self.session_state_manager = SessionStateManager(account_key)
+        self.last_session_update: dict[str, Any] | None = None
+        self.cookie_jar = _build_cookie_jar(self.ticket_data)
         self.opener = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(_build_cookie_jar(self.ticket_data))
+            urllib.request.HTTPCookieProcessor(self.cookie_jar)
         )
 
     def _post_json(self, url: str, payload: dict[str, Any], referer: str) -> dict[str, Any]:
@@ -219,12 +291,26 @@ class ShipmentQueryClient:
             headers=_build_headers(self.ticket_data, referer),
             method="POST",
         )
-        with self.opener.open(request, timeout=60) as response:
-            body = response.read().decode("utf-8")
-            return {
-                "status": response.status,
-                "body": json.loads(body),
-            }
+        try:
+            with self.opener.open(request, timeout=60) as response:
+                body = response.read().decode("utf-8")
+                session_updated = self.session_state_manager.sync_cookie_jar(
+                    self.cookie_jar,
+                    current_url=referer,
+                    source=f"query:{url}",
+                )
+                self.last_session_update = {
+                    "updated": session_updated,
+                    "source_url": url,
+                }
+                return {
+                    "status": response.status,
+                    "body": json.loads(body),
+                    "headers": dict(response.headers.items()),
+                }
+        except urllib.error.HTTPError as exc:
+            error_body = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"HTTP {exc.code} for {url}: {error_body}") from exc
 
     def init_send_query(self) -> dict[str, Any]:
         return self._post_json(INIT_SEND_URL, {}, SEND_REFERER)
@@ -321,6 +407,9 @@ class ShipmentQueryClient:
             payload["pm"] = query_input.product_code
         return payload
 
+    def build_send_payload(self, query_input: QueryInput) -> dict[str, Any]:
+        return self._build_send_payload(query_input)
+
     def query_send_legacy(self, query_input: QueryInput) -> dict[str, Any]:
         payload = self._build_send_payload(query_input)
         return self._post_json(SEND_QUERY_URL, payload, SEND_REFERER)
@@ -392,6 +481,9 @@ class ShipmentQueryClient:
             {"ydid": encoded},
             TRACK_REFERER + encoded.replace("=", "%3D"),
         )
+
+    def normalize_tracking(self, shipment_id: str, tracking_response: dict[str, Any]) -> dict[str, Any]:
+        return build_tracking_projection(shipment_id, tracking_response)
 
     def normalize_result(
         self,

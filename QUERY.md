@@ -42,6 +42,10 @@ python3 ./tools/bootstrap_95306_ticket.py --account newts --yes
   - standalone station lookup CLI
 - `tools/query_95306_shipment.py`
   - standalone shipment lookup CLI
+- `tools/query_95306_tracking.py`
+  - standalone single-shipment tracking CLI
+- `docs/95306-tracking-phase3a.md`
+  - tracking request and response baseline
 
 ## Station Lookup
 
@@ -112,6 +116,28 @@ python .\tools\query_95306_shipment.py --account newts --start-date 2026-03-12 -
   - skip the optional `qeryYdgjNew` tracking request
 - `--single-page`
   - disable auto-pagination and only request one page
+
+## Tracking Query
+
+Tracking query is now available as a standalone one-shot tool for one shipment id.
+
+Windows:
+
+```powershell
+python .\tools\query_95306_tracking.py --account newts --shipment-id 516322603154358675
+```
+
+Preconditions are the same as shipment query:
+
+- valid `runtime/95306_ticket_<account>.json`
+- valid `runtime/95306_storage_state_<account>.json`
+- usable account session on 95306
+
+If the server returns `invalid_token`, refresh the ticket first:
+
+```powershell
+python .\tools\refresh_95306_ticket.py --account newts
+```
 
 ## Output JSON Structure
 
