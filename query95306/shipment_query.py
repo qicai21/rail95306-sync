@@ -7,6 +7,7 @@ import urllib.request
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import date, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -179,13 +180,222 @@ def _latest_update_from_record(record: dict[str, Any]) -> str | None:
     return None
 
 
+def _parse_tracking_time(value: Any) -> datetime | None:
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def _tracking_station_key(event: dict[str, Any]) -> tuple[str | None, str | None]:
+    return (
+        str(event.get("tmism")).strip() if event.get("tmism") not in (None, "") else None,
+        str(event.get("operator")).strip() if event.get("operator") not in (None, "") else None,
+    )
+
+
+def extract_station_catalog_from_tracking(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    catalog: dict[tuple[str | None, str | None], dict[str, Any]] = {}
+    for event in events:
+        key = _tracking_station_key(event)
+        if key == (None, None):
+            continue
+        station = catalog.setdefault(
+            key,
+            {
+                "station_name": event.get("operator"),
+                "tmism": event.get("tmism"),
+                "dbm": event.get("czdbm"),
+                "address": event.get("czdz"),
+                "first_event_time": event.get("detail"),
+                "last_event_time": event.get("detail"),
+                "event_count": 0,
+            },
+        )
+        station["event_count"] += 1
+        current_time = _parse_tracking_time(event.get("detail"))
+        first_time = _parse_tracking_time(station.get("first_event_time"))
+        last_time = _parse_tracking_time(station.get("last_event_time"))
+        if current_time and (first_time is None or current_time < first_time):
+            station["first_event_time"] = event.get("detail")
+        if current_time and (last_time is None or current_time > last_time):
+            station["last_event_time"] = event.get("detail")
+        if not station.get("dbm") and event.get("czdbm"):
+            station["dbm"] = event.get("czdbm")
+        if not station.get("address") and event.get("czdz"):
+            station["address"] = event.get("czdz")
+    return list(catalog.values())
+
+
+def build_route_path_from_tracking(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ordered = sorted(
+        events,
+        key=lambda item: (_parse_tracking_time(item.get("detail")) or datetime.min, str(item.get("detail") or "")),
+    )
+    path: list[dict[str, Any]] = []
+    last_key: tuple[str | None, str | None] | None = None
+    for event in ordered:
+        key = _tracking_station_key(event)
+        if key == (None, None):
+            continue
+        if key == last_key:
+            continue
+        path.append(
+            {
+                "station_name": event.get("operator"),
+                "tmism": event.get("tmism"),
+                "dbm": event.get("czdbm"),
+                "address": event.get("czdz"),
+                "event_time": event.get("detail"),
+                "event_message": event.get("message"),
+            }
+        )
+        last_key = key
+    return path
+
+
+def build_route_track_from_tracking(
+    *,
+    fs_main: dict[str, Any],
+    movement_events: list[dict[str, Any]],
+    route_nodes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    route_track: list[dict[str, Any]] = []
+    index_map: dict[tuple[str | None, str | None], int] = {}
+
+    def station_key(station_name: Any, station_tmis: Any) -> tuple[str | None, str | None]:
+        name = str(station_name).strip() if station_name not in (None, "") else None
+        tmis = str(station_tmis).strip() if station_tmis not in (None, "") else None
+        return (name, tmis)
+
+    def ensure_station(
+        station_name: Any,
+        station_tmis: Any = None,
+        station_dbm: Any = None,
+        location: Any = None,
+    ) -> dict[str, Any]:
+        key = station_key(station_name, station_tmis)
+        if key in index_map:
+            item = route_track[index_map[key]]
+            if not item.get("station_dbm") and station_dbm:
+                item["station_dbm"] = station_dbm
+            if not item.get("location") and location:
+                item["location"] = location
+            return item
+
+        item = {
+            "station_name": key[0],
+            "station_tmis": key[1],
+            "station_dbm": str(station_dbm).strip() if station_dbm not in (None, "") else None,
+            "location": str(location).strip() if location not in (None, "") else None,
+            "arrived_at": None,
+            "departed_at": None,
+        }
+        index_map[key] = len(route_track)
+        route_track.append(item)
+        return item
+
+    ensure_station(fs_main.get("fzhzzm"), fs_main.get("fztmism"))
+    for node in route_nodes:
+        ensure_station(node.get("operator"), None, None, node.get("czdz"))
+    ensure_station(fs_main.get("dzhzzm"), fs_main.get("dztmism"))
+
+    for event in sorted(
+        movement_events,
+        key=lambda item: (_parse_tracking_time(item.get("event_time")) or datetime.min, str(item.get("event_time") or "")),
+    ):
+        item = ensure_station(
+            event.get("station"),
+            event.get("station_tmis"),
+            event.get("station_dbm"),
+            event.get("location"),
+        )
+        if event.get("event_type") == "到达" and not item.get("arrived_at"):
+            item["arrived_at"] = event.get("event_time")
+        if event.get("event_type") == "发出" and not item.get("departed_at"):
+            item["departed_at"] = event.get("event_time")
+
+    return route_track
+
+
 def build_tracking_projection(shipment_id: str, tracking_response: dict[str, Any]) -> dict[str, Any]:
     body = tracking_response.get("body", {})
     data = body.get("data", {}) or {}
     fs_main = data.get("fsMain", {}) or {}
     events = data.get("gj", []) or []
+    detail_groups = data.get("dtgjDetailVoList", []) or []
     route_nodes = data.get("jlzc", []) or []
     latest_event = events[0] if events else {}
+    station_catalog = extract_station_catalog_from_tracking(events)
+    route_path = build_route_path_from_tracking(events)
+    latest_event_message = str(latest_event.get("message") or "").strip()
+    latest_event_time = latest_event.get("detail")
+    latest_event_report_id = latest_event.get("rptid")
+    latest_event_station = str(latest_event.get("operator") or "").strip()
+    status_name = str(fs_main.get("ztgjjc") or "").strip()
+    destination_name = str(fs_main.get("dzhzzm") or "").strip()
+
+    if "交付" in latest_event_message:
+        derived_status = "已交付"
+    elif latest_event_report_id == "LCDD" and destination_name and latest_event_station == destination_name:
+        derived_status = "到达"
+    elif status_name == "已发车":
+        derived_status = "在途"
+    elif latest_event_report_id == "LCCF" or "离开" in latest_event_message or "出发" in latest_event_message:
+        derived_status = "在途"
+    elif latest_event_report_id == "LCDD" or "到达" in latest_event_message:
+        derived_status = "在途"
+    else:
+        derived_status = status_name or None
+
+    current_status_summary = None
+    if derived_status and latest_event_time and latest_event_message:
+        current_status_summary = f"{derived_status}（最近报告：{latest_event_time} {latest_event_message}）"
+    elif derived_status:
+        current_status_summary = derived_status
+
+    movement_events = []
+    for event in events:
+        rptid = event.get("rptid")
+        if rptid == "LCDD":
+            event_type = "到达"
+        elif rptid == "LCCF":
+            event_type = "发出"
+        else:
+            continue
+        movement_events.append(
+            {
+                "event_type": event_type,
+                "event_time": event.get("detail"),
+                "station": event.get("operator"),
+                "station_tmis": event.get("tmism"),
+                "station_dbm": event.get("czdbm"),
+                "location": event.get("czdz"),
+                "message": event.get("message"),
+                "report_id": rptid,
+            }
+        )
+
+    departure_times = [item for item in movement_events if item["event_type"] == "发出"]
+    arrival_times = [item for item in movement_events if item["event_type"] == "到达"]
+    final_arrival_time = None
+    destination_name = fs_main.get("dzhzzm")
+    for item in arrival_times:
+        if item.get("station") == destination_name:
+            final_arrival_time = item.get("event_time")
+            break
+    if not final_arrival_time:
+        final_arrival_time = fs_main.get("dzsj")
+    route_track = build_route_track_from_tracking(
+        fs_main=fs_main,
+        movement_events=movement_events,
+        route_nodes=route_nodes,
+    )
 
     return {
         "query_input": {
@@ -209,14 +419,28 @@ def build_tracking_projection(shipment_id: str, tracking_response: dict[str, Any
         "latest_status": {
             "status_code": fs_main.get("ztgj"),
             "status_name": fs_main.get("ztgjjc"),
-            "latest_event_time": latest_event.get("detail"),
-            "latest_event_message": latest_event.get("message"),
-            "latest_event_station": latest_event.get("operator"),
+            "latest_event_time": latest_event_time,
+            "latest_event_message": latest_event_message or None,
+            "latest_event_station": latest_event_station or None,
             "latest_event_station_tmis": latest_event.get("tmism"),
             "latest_event_station_dbm": latest_event.get("czdbm"),
             "latest_event_location": latest_event.get("czdz"),
-            "latest_event_report_id": latest_event.get("rptid"),
+            "latest_event_report_id": latest_event_report_id,
         },
+        "derived_status": derived_status,
+        "current_status_summary": current_status_summary,
+        "movement_events": movement_events,
+        "tracking_table_preview": {
+            "origin": fs_main.get("fzhzzm"),
+            "destination": destination_name,
+            "cargo_name": fs_main.get("hzpm"),
+            "departure_time": fs_main.get("fcsj") or (departure_times[0]["event_time"] if departure_times else None),
+            "station_arrivals": arrival_times,
+            "station_departures": departure_times,
+            "final_arrival_time": final_arrival_time,
+            "train_group_id": None,
+        },
+        "route_track": route_track,
         "tracking_flags": data.get("gjzt", {}) or {},
         "timing": {
             "estimated_arrival_time": data.get("yjddsj"),
@@ -229,12 +453,18 @@ def build_tracking_projection(shipment_id: str, tracking_response: dict[str, Any
             "delivery_time": fs_main.get("dzjfrq"),
         },
         "events": events,
+        "detail_groups": detail_groups,
+        "station_catalog": station_catalog,
+        "route_path": route_path,
         "route_nodes": route_nodes,
         "raw_response": {
             "http_status": tracking_response.get("status"),
             "return_code": body.get("returnCode"),
             "message": body.get("msg"),
             "event_count": len(events),
+            "detail_group_count": len(detail_groups),
+            "station_count": len(station_catalog),
+            "route_path_count": len(route_path),
             "route_node_count": len(route_nodes),
         },
     }
