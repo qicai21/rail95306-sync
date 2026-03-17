@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 from urllib import error, request
 
+from .session_state import SessionStateManager
 from .ticket_store import (
     heartbeat_report_path_for_account,
     heartbeat_report_path_for_account_version,
@@ -133,6 +134,7 @@ def refresh_ticket(account_key: str, version: str | None = None) -> dict[str, An
         if version
         else heartbeat_report_path_for_account(account_key)
     )
+    session_manager = SessionStateManager(account_key) if not version else None
 
     ticket_data = load_ticket_bundle(ticket_path)
     storage_state = load_storage_state(storage_state_path)
@@ -235,8 +237,11 @@ def refresh_ticket(account_key: str, version: str | None = None) -> dict[str, An
     updated_storage_state = deepcopy(storage_state)
     updated_storage_state["cookies"] = updated_ticket["cookies"]
 
-    save_ticket_bundle(updated_ticket, ticket_path)
-    save_storage_state(updated_storage_state, storage_state_path)
+    if session_manager is not None:
+        session_manager.save_bundle(updated_ticket, updated_storage_state, source="heartbeat_refresh")
+    else:
+        save_ticket_bundle(updated_ticket, ticket_path)
+        save_storage_state(updated_storage_state, storage_state_path)
 
     report["success"] = True
     report["changes"] = {

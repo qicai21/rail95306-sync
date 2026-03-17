@@ -15,13 +15,9 @@ This means:
 
 The old query implementation is no longer the primary decision baseline.
 
-It remains in the repository only as historical reference for:
+Its useful conclusions have been extracted into the current docs and query modules.
 
-- old field names
-- old request shape
-- old tracking flow
-
-But it no longer blocks Phase 2 delivery decisions.
+It no longer blocks Phase 2 delivery decisions and does not need to stay in the active repository tree.
 
 ## Delivered In This Phase
 

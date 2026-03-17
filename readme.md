@@ -40,7 +40,7 @@
   - 账户配置、门票文件、验证报告、刷新追踪报告都在这里
   - 该目录已加入 `.gitignore`
 
-- [browser.py](/D:/projects/rail95306-sync/browser.py)
+- [query95306](/D:/projects/rail95306-sync/query95306)
   - 旧版接口调用实现
   - 目前主要作为历史逻辑参考
 
@@ -83,7 +83,7 @@ python .\tools\bootstrap_95306_ticket.py --list-accounts
 
 账户文件位置：
 
-- [runtime/95306_accounts.json](/D:/projects/rail95306-sync/runtime/95306_accounts.json)
+- [config_examples/95306_accounts.example.json](/D:/projects/rail95306-sync/config_examples/95306_accounts.example.json)
 
 ### 3. 首次登录抓票
 

@@ -6,14 +6,12 @@ from typing import Any
 
 from playwright.sync_api import BrowserContext, Page, Request, Response, TimeoutError, sync_playwright
 
+from .session_state import SessionStateManager
 from .ticket_store import (
     ensure_runtime_dir,
     iso_now,
-    load_storage_state,
     load_ticket_bundle,
     save_json,
-    save_storage_state,
-    save_ticket_bundle,
     storage_state_path_for_account,
     ticket_path_for_account,
 )
@@ -169,7 +167,7 @@ def run_keepalive_check(account: dict[str, Any], browser_name: str = "chromium",
     ticket_path = ticket_path_for_account(account["key"])
     storage_state_file = storage_state_path_for_account(account["key"])
     ticket_data = load_ticket_bundle(ticket_path)
-    storage_state = load_storage_state(storage_state_file)
+    session_manager = SessionStateManager(account["key"])
 
     requests_log: list[dict[str, Any]] = []
     responses_log: list[dict[str, Any]] = []
@@ -217,8 +215,7 @@ def run_keepalive_check(account: dict[str, Any], browser_name: str = "chromium",
                 "result": "ok",
             }
             updated_storage_state = context.storage_state()
-            save_ticket_bundle(updated_ticket, ticket_path)
-            save_storage_state(updated_storage_state, storage_state_file)
+            session_manager.save_bundle(updated_ticket, updated_storage_state, source="keepalive")
         else:
             screenshot_file = _screenshots_dir() / f"{account['key']}_{int(time.time())}.png"
             page.screenshot(path=str(screenshot_file), full_page=True)

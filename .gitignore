@@ -23,5 +23,11 @@ runtime/*.pid
 runtime/95306_query_observation_*.json
 runtime/95306_query_observation_*.partial.json
 runtime/95306_refresh_trace_*.json
+runtime/95306_collection.sqlite3
+runtime/phase4_*.json
+runtime/tmp_phase4_*.json
 
 playwright/.auth/
+*.ipynb
+*.xlsx
+my_95306_headers.json
